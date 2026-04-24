@@ -9,9 +9,11 @@ module alu_control_unit (
     output wire       we_a,
     output wire       we_q,
     output wire       we_m,
+    output wire       we_out,
     output wire       end_flag,
     output wire       counter_load,
     output wire       counter_en,
+    output wire [1:0] fsm_state,
     output wire       s0,
     output wire       s1,
     output wire       not_s0,
@@ -23,6 +25,7 @@ module alu_control_unit (
 
     assign s0 = state[0];
     assign s1 = state[1];
+    assign fsm_state = state;
     assign not_s0 = ~s0;
     assign not_s1 = ~s1;
 
@@ -47,6 +50,7 @@ module alu_control_unit (
     assign we_q = s0;
     assign we_m = s0 & not_s1;
     assign end_flag = s1 & not_s0;
+    assign we_out = end_flag;
 
     assign counter_load = not_s1 & s0;
     assign counter_en = s1 & s0;

@@ -14,6 +14,7 @@ module tb_alu_top;
     reg  [7:0] a_in;
     reg  [7:0] b_in;
 
+    wire [15:0] out_put;
     wire [8:0] a;
     wire [7:0] q;
     wire [7:0] m;
@@ -29,6 +30,10 @@ module tb_alu_top;
     wire       we_a;
     wire       we_q;
     wire       we_m;
+    wire       we_out;
+    wire [1:0] fsm_state;
+    wire [8:0] final_a;
+    wire [7:0] final_q;
 
     integer errors;
 
@@ -39,6 +44,7 @@ module tb_alu_top;
         .opcode(opcode),
         .a_in(a_in),
         .b_in(b_in),
+        .out_put(out_put),
         .a(a),
         .q(q),
         .m(m),
@@ -53,8 +59,18 @@ module tb_alu_top;
         .target_reached(target_reached),
         .we_a(we_a),
         .we_q(we_q),
-        .we_m(we_m)
+        .we_m(we_m),
+        .we_out(we_out),
+        .fsm_state(fsm_state),
+        .final_a(final_a),
+        .final_q(final_q)
     );
+
+    initial begin
+        $dumpfile("tb_alu_top.vcd");
+        $dumpvars(0, tb_alu_top);
+        $display("GTKWave VCD: tb_alu_top.vcd");
+    end
 
     initial begin
         clk = 1'b0;
@@ -108,15 +124,20 @@ module tb_alu_top;
         input [7:0] lhs;
         input [7:0] rhs;
         reg [8:0] expected;
+        reg [15:0] expected_out;
         begin
             reset_dut();
             run_operation(OP_ADD, lhs, rhs);
             expected = {1'b0, lhs} + {1'b0, rhs};
+            expected_out = {{7{expected[8]}}, expected};
             if (a !== expected) begin
                 $display("ERROR ADD: %0d + %0d expected A=%0d got A=%0d", lhs, rhs, expected, a);
                 errors = errors + 1;
+            end else if (out_put !== expected_out) begin
+                $display("ERROR ADD OUT: %0d + %0d expected OUT=%0d got OUT=%0d", lhs, rhs, expected_out, out_put);
+                errors = errors + 1;
             end else begin
-                $display("PASS ADD: %0d + %0d = %0d", lhs, rhs, a);
+                $display("PASS ADD: %0d + %0d = %0d OUT=%0d", lhs, rhs, a, out_put);
             end
         end
     endtask
@@ -125,15 +146,20 @@ module tb_alu_top;
         input [7:0] lhs;
         input [7:0] rhs;
         reg signed [8:0] expected;
+        reg signed [15:0] expected_out;
         begin
             reset_dut();
             run_operation(OP_SUB, lhs, rhs);
             expected = $signed({1'b0, lhs}) - $signed({1'b0, rhs});
+            expected_out = {{7{expected[8]}}, expected};
             if ($signed(a) !== expected) begin
                 $display("ERROR SUB: %0d - %0d expected A=%0d got A=%0d", lhs, rhs, expected, $signed(a));
                 errors = errors + 1;
+            end else if ($signed(out_put) !== expected_out) begin
+                $display("ERROR SUB OUT: %0d - %0d expected OUT=%0d got OUT=%0d", lhs, rhs, expected_out, $signed(out_put));
+                errors = errors + 1;
             end else begin
-                $display("PASS SUB: %0d - %0d = %0d", lhs, rhs, $signed(a));
+                $display("PASS SUB: %0d - %0d = %0d OUT=%0d", lhs, rhs, $signed(a), $signed(out_put));
             end
         end
     endtask
@@ -151,8 +177,11 @@ module tb_alu_top;
             if (actual[15:0] !== expected) begin
                 $display("ERROR MUL: %0d * %0d expected AQ=%0d got AQ=%0d A=%b Q=%b", lhs, rhs, expected, actual[15:0], a, q);
                 errors = errors + 1;
+            end else if (out_put !== expected[15:0]) begin
+                $display("ERROR MUL OUT: %0d * %0d expected OUT=%0d got OUT=%0d", lhs, rhs, expected, $signed(out_put));
+                errors = errors + 1;
             end else begin
-                $display("PASS MUL: %0d * %0d = %0d", lhs, rhs, actual[15:0]);
+                $display("PASS MUL: %0d * %0d = %0d OUT=%0d", lhs, rhs, actual[15:0], $signed(out_put));
             end
         end
     endtask
@@ -161,15 +190,20 @@ module tb_alu_top;
         input [7:0] dividend;
         input [7:0] divisor;
         reg [7:0] expected_q;
+        reg [7:0] expected_r;
         begin
             reset_dut();
             run_operation(OP_DIV, dividend, divisor);
             expected_q = dividend / divisor;
+            expected_r = dividend % divisor;
             if (q !== expected_q) begin
                 $display("ERROR DIV: %0d / %0d expected Q=%0d got Q=%0d A=%0d", dividend, divisor, expected_q, q, a);
                 errors = errors + 1;
+            end else if (out_put !== {expected_r, expected_q}) begin
+                $display("ERROR DIV OUT: %0d / %0d expected OUT={R=%0d,Q=%0d} got OUT=%h", dividend, divisor, expected_r, expected_q, out_put);
+                errors = errors + 1;
             end else begin
-                $display("PASS DIV: %0d / %0d quotient=%0d remainder_like_A=%0d", dividend, divisor, q, a);
+                $display("PASS DIV: %0d / %0d quotient=%0d remainder=%0d OUT=%h", dividend, divisor, q, final_a[7:0], out_put);
             end
         end
     endtask

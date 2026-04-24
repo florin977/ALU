@@ -10,6 +10,8 @@ module alu_datapath (
     input  wire       we_a,
     input  wire       we_q,
     input  wire       we_m,
+    input  wire       we_out,
+    output wire [15:0] out_put,
     output wire [8:0] a,
     output wire [7:0] q,
     output wire [7:0] m,
@@ -19,18 +21,23 @@ module alu_datapath (
     output wire [7:0] q_shifted,
     output wire [1:0] select_m,
     output wire       sub,
-    output wire       not_a8
+    output wire       not_a8,
+    output wire [8:0] final_a,
+    output wire [7:0] final_q
 );
 
     wire [8:0] a_next;
     wire [7:0] q_next;
     wire [7:0] m_next;
     wire       q_1_next;
+    wire [15:0] out_next;
 
     wire [1:0] booth_select_m;
     wire       booth_sub;
 
     wire [8:0] m_ext;
+    wire [8:0] m_zero_ext;
+    wire [8:0] m_sign_ext;
     wire [8:0] two_m;
     wire [8:0] selected_m;
     wire [8:0] selected_m_xor_sub;
@@ -42,6 +49,21 @@ module alu_datapath (
     wire [8:0] booth_a;
     wire [7:0] booth_q;
     wire [7:0] srt2_q;
+    wire [7:0] a_in_neg;
+    wire [7:0] b_in_neg;
+    wire [7:0] a_in_f;
+    wire [7:0] b_in_f;
+    wire       sign_a_in;
+    wire       sign_b_in;
+    wire       sign_q_final;
+    wire [7:0] q_div_neg;
+    wire [7:0] q_div;
+    wire [8:0] a_neg_remainder;
+    wire       correction_cout;
+    wire [8:0] a_div;
+    wire [8:0] final_a_mux;
+    wire [15:0] res_add_sub;
+    wire [15:0] res_mul_div;
 
     assign not_a8 = ~a[8];
 
@@ -79,6 +101,17 @@ module alu_datapath (
     );
 
     register_param #(
+        .WIDTH(16),
+        .RESET_VALUE(16'b0)
+    ) out_reg (
+        .clk(clk),
+        .rst(rst),
+        .we(we_out),
+        .d(out_next),
+        .q(out_put)
+    );
+
+    register_param #(
         .WIDTH(1),
         .RESET_VALUE(1'b0)
     ) q_1_reg (
@@ -88,6 +121,24 @@ module alu_datapath (
         .d(q_1_next),
         .q(q_1)
     );
+
+    assign sign_a_in = a_in[7];
+    assign sign_b_in = b_in[7];
+    assign sign_q_final = sign_a_in ^ sign_b_in;
+
+    twos_complement_param #(.WIDTH(8)) a_in_negator (
+        .in(a_in),
+        .out(a_in_neg)
+    );
+
+    twos_complement_param #(.WIDTH(8)) b_in_negator (
+        .in(b_in),
+        .out(b_in_neg)
+    );
+
+    // Impartirea non-restoring lucreaza cu valori pozitive; semnul catului se corecteaza la final.
+    assign a_in_f = (opcode == 2'b11 && sign_a_in) ? a_in_neg : a_in;
+    assign b_in_f = (opcode == 2'b11 && sign_b_in) ? b_in_neg : b_in;
 
     mux4_param #(.WIDTH(9)) a_input_mux (
         .in0(a),
@@ -100,7 +151,7 @@ module alu_datapath (
 
     mux4_param #(.WIDTH(8)) q_input_mux (
         .in0(q),
-        .in1(a_in),
+        .in1(a_in_f),
         .in2(q),
         .in3(q_shifted),
         .sel(cu_signal),
@@ -109,7 +160,7 @@ module alu_datapath (
 
     mux4_param #(.WIDTH(8)) m_input_mux (
         .in0(m),
-        .in1(b_in),
+        .in1(b_in_f),
         .in2(m),
         .in3(m),
         .sel(cu_signal),
@@ -151,7 +202,9 @@ module alu_datapath (
         .out(sub)
     );
 
-    assign m_ext = {m[7], m};
+    assign m_zero_ext = {1'b0, m};
+    assign m_sign_ext = {m[7], m};
+    assign m_ext = (opcode == 2'b10) ? m_sign_ext : m_zero_ext;
 
     shifter_param #(
         .WIDTH(9),
@@ -224,5 +277,28 @@ module alu_datapath (
         .sel(opcode),
         .out(q_shifted)
     );
+
+    parallel_adder_9bit remainder_correction_adder (
+        .a(a),
+        .b(m_zero_ext),
+        .cin(1'b0),
+        .sum(a_neg_remainder),
+        .cout(correction_cout)
+    );
+
+    twos_complement_param #(.WIDTH(8)) q_div_negator (
+        .in(q),
+        .out(q_div_neg)
+    );
+
+    assign q_div = sign_q_final ? q_div_neg : q;
+    assign final_q = (opcode == 2'b11) ? q_div : q;
+    assign a_div = a[8] ? a_neg_remainder : a;
+    assign final_a_mux = (opcode == 2'b11) ? a_div : a;
+    assign final_a = final_a_mux;
+
+    assign res_add_sub = {{7{final_a_mux[8]}}, final_a_mux};
+    assign res_mul_div = {final_a_mux[7:0], final_q};
+    assign out_next = (opcode[1] == 1'b0) ? res_add_sub : res_mul_div;
 
 endmodule

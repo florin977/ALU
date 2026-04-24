@@ -21,7 +21,12 @@ module alu_top (
     output wire       target_reached,
     output wire       we_a,
     output wire       we_q,
-    output wire       we_m
+    output wire       we_m,
+    output wire       we_out,
+    output wire [1:0] fsm_state,
+    output wire [8:0] final_a,
+    output wire [7:0] final_q,
+    output wire [15:0] out_put
 );
 
     wire       counter_load;
@@ -54,9 +59,11 @@ module alu_top (
         .we_a(we_a),
         .we_q(we_q),
         .we_m(we_m),
+        .we_out(we_out),
         .end_flag(end_flag),
         .counter_load(counter_load),
         .counter_en(counter_en),
+        .fsm_state(fsm_state),
         .s0(s0),
         .s1(s1),
         .not_s0(not_s0),
@@ -80,6 +87,8 @@ module alu_top (
         .we_a(we_a),
         .we_q(we_q),
         .we_m(we_m),
+        .we_out(we_out),
+        .out_put(out_put),
         .a(a),
         .q(q),
         .m(m),
@@ -89,7 +98,9 @@ module alu_top (
         .q_shifted(q_shifted),
         .select_m(select_m),
         .sub(sub),
-        .not_a8(not_a8)
+        .not_a8(not_a8),
+        .final_a(final_a),
+        .final_q(final_q)
     );
 
 endmodule
